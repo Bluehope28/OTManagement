@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>직원 OT 관리 시스템 (AI 기능 추가)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; }
+        .modal { transition: opacity 0.25s ease; }
+        .modal-content { transition: transform 0.25s ease; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .toast {
+            visibility: hidden; min-width: 250px; background-color: #333; color: #fff;
+            text-align: center; border-radius: 8px; padding: 16px; position: fixed;
+            z-index: 50; left: 50%; bottom: 30px; transform: translateX(-50%);
+            opacity: 0; transition: opacity 0.5s, visibility 0.5s;
+        }
+        .toast.show { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <!-- 로그인 화면 -->
+    <div id="auth-screen" class="min-h-screen flex items-center justify-center bg-slate-200">
+        <div class="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full text-center">
+            <h1 class="text-3xl font-bold text-slate-900 mb-6">OT 관리 시스템</h1>
+            <div id="user-selection-container" class="space-y-4">
+                 <p class="text-slate-600">사용자를 선택하거나 새 사용자를 등록하세요.</p>
+                 <select id="user-select" class="w-full p-3 border border-slate-300 rounded-md">
+                     <option value="">-- 사용자 선택 --</option>
+                 </select>
+                 <button id="login-user-btn" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700">선택한 사용자로 로그인</button>
+                 <hr class="my-4">
+                 <input type="text" id="new-user-name" placeholder="새 사용자 이름 입력" class="w-full p-2 border border-slate-300 rounded-md">
+                 <button id="register-user-btn" class="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700">새 사용자 등록</button>
+            </div>
+            <button id="show-admin-login" class="text-sm text-slate-500 hover:underline mt-6">관리자 로그인</button>
+            <div id="admin-login-container" class="hidden mt-4 space-y-3">
+                <input type="password" id="admin-password" placeholder="관리자 비밀번호" class="w-full p-2 border border-slate-300 rounded-md">
+                <button id="login-admin-btn" class="w-full bg-gray-800 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-gray-900">관리자 로그인</button>
+                <button id="back-to-user-select" class="text-sm text-slate-500 hover:underline">사용자 선택으로</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사용자 화면 -->
+    <div id="user-view" class="hidden">
+        <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+             <header class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl md:text-4xl font-bold text-slate-900">OT 관리</h1>
+                    <p id="welcome-user" class="text-slate-600 mt-2"></p>
+                </div>
+                <button id="logout-btn-user" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600">로그아웃</button>
+            </header>
+            <main class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="space-y-8">
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h2 class="text-xl font-bold mb-4 border-b pb-2">OT 추가하기</h2>
+                        <form id="add-ot-form" class="space-y-4">
+                            <input type="date" id="ot-date" required class="w-full p-2 border border-slate-300 rounded-md">
+                            <input type="number" id="ot-hours" min="0.5" step="0.5" required placeholder="근무 시간 (예: 8 또는 2.5)" class="w-full p-2 border border-slate-300 rounded-md">
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700">추가</button>
+                        </form>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h2 class="text-xl font-bold mb-4 border-b pb-2">OT 사용하기</h2>
+                        <form id="use-ot-form" class="space-y-4">
+                            <input type="number" id="use-hours" min="1" step="1" required placeholder="사용 시간 (1시간 단위)" class="w-full p-2 border border-slate-300 rounded-md">
+                            <button type="submit" class="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700">사용 처리</button>
+                        </form>
+                    </div>
+                    <div id="result-card" class="bg-white p-6 rounded-xl shadow-lg hidden">
+                        <h2 class="text-xl font-bold mb-4 border-b pb-2">사용 내역 메시지</h2>
+                        <div class="bg-slate-100 p-4 rounded-md mb-4 whitespace-pre-wrap break-words"><p id="result-message"></p></div>
+                        <button id="copy-button" class="w-full bg-gray-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-gray-700">메시지 복사</button>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center border-b pb-2 mb-4">
+                        <h2 class="text-xl font-bold">내 잔여 OT 목록</h2>
+                        <div class="text-right">
+                            <span class="block text-sm text-slate-500">총 잔여 시간</span>
+                            <span id="total-remaining-hours" class="block text-2xl font-bold text-blue-600">0시간</span>
+                        </div>
+                    </div>
+                     <button id="gemini-vacation-btn" class="w-full bg-purple-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-purple-700 transition-colors duration-300 mb-4">✨ 휴가 계획 추천받기</button>
+                    <div id="ot-list" class="space-y-3 max-h-[520px] overflow-y-auto pr-2"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- 관리자 화면 -->
+    <div id="admin-view" class="hidden">
+        <div class="container mx-auto p-4 md:p-8">
+            <header class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl md:text-4xl font-bold text-slate-900">관리자 대시보드</h1>
+                <button id="logout-btn-admin" class="bg-gray-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-900">로그아웃</button>
+            </header>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-bold mb-4">직원 관리</h2>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="new-employee-name" placeholder="새 직원 이름" class="flex-grow p-2 border rounded-md">
+                        <button id="add-employee-btn" class="bg-blue-600 text-white font-bold p-2 rounded-md hover:bg-blue-700">추가</button>
+                    </div>
+                    <ul id="employee-list" class="space-y-2 max-h-[60vh] overflow-y-auto"></ul>
+                    <button id="download-data-btn" class="w-full mt-4 bg-teal-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-teal-700 transition-colors">모든 데이터 다운로드 (백업)</button>
+                </div>
+                <div id="employee-details-view" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg hidden">
+                    <div class="flex justify-between items-start mb-4">
+                        <h2 id="employee-details-name" class="text-2xl font-bold"></h2>
+                        <button id="gemini-analysis-btn" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors duration-300 ml-4 whitespace-nowrap">✨ 근무 패턴 분석</button>
+                    </div>
+                    <!-- 월별 요약 -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">월별 현황</h3>
+                        <div class="flex items-center gap-2 mb-3">
+                             <input type="month" id="month-selector" class="p-2 border rounded-md">
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 text-center">
+                            <div class="bg-blue-100 p-3 rounded-lg"><p class="text-sm text-blue-800">신규 생성</p><p id="summary-generated" class="text-xl font-bold">0시간</p></div>
+                            <div class="bg-green-100 p-3 rounded-lg"><p class="text-sm text-green-800">사용</p><p id="summary-used" class="text-xl font-bold">0시간</p></div>
+                            <div class="bg-gray-100 p-3 rounded-lg"><p class="text-sm text-gray-800">월말 잔여</p><p id="summary-remaining" class="text-xl font-bold">0시간</p></div>
+                        </div>
+                    </div>
+                    <!-- OT 기록 -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">OT 기록</h3>
+                        <div id="admin-ot-list" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- OT 수정 모달 -->
+    <div id="edit-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-40 opacity-0">
+        <div class="modal-content bg-white p-6 rounded-xl shadow-lg w-full max-w-md transform scale-95">
+             <h2 class="text-xl font-bold mb-4">OT 정보 수정</h2>
+             <form id="edit-ot-form" class="space-y-4">
+                 <input type="hidden" id="edit-employee-id">
+                 <input type="hidden" id="edit-record-id">
+                 <div><label for="edit-ot-date" class="block text-sm font-medium text-slate-700">발생일</label><input type="date" id="edit-ot-date" required class="w-full p-2 border rounded-md mt-1"></div>
+                 <div><label for="edit-original-hours" class="block text-sm font-medium text-slate-700">총 시간</label><input type="number" id="edit-original-hours" step="0.5" min="0" required class="w-full p-2 border rounded-md mt-1"></div>
+                 <div><label for="edit-remaining-hours" class="block text-sm font-medium text-slate-700">잔여 시간</label><input type="number" id="edit-remaining-hours" step="0.5" min="0" required class="w-full p-2 border rounded-md mt-1"></div>
+                 <div class="flex justify-end gap-3 pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-400">취소</button><button type="submit" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">저장</button></div>
+             </form>
+        </div>
+    </div>
+
+    <!-- Gemini 결과 모달 -->
+    <div id="gemini-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-40 opacity-0">
+        <div class="modal-content bg-white p-6 rounded-xl shadow-lg w-full max-w-lg transform scale-95">
+             <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 id="gemini-modal-title" class="text-xl font-bold">✨ Gemini AI</h2>
+                <button id="close-gemini-modal-btn" class="text-gray-500 hover:text-gray-800 font-bold text-2xl">&times;</button>
+             </div>
+             <div id="gemini-modal-content" class="space-y-4 max-h-[60vh] overflow-y-auto p-2"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        
+        let appData = { employees: [] };
+        let currentUserId = null;
+        let isAdmin = false;
+        let selectedAdminEmployeeId = null;
+
+        const authScreen = document.getElementById('auth-screen');
+        const userView = document.getElementById('user-view');
+        const adminView = document.getElementById('admin-view');
+        const userSelect = document.getElementById('user-select');
+        const adminPasswordInput = document.getElementById('admin-password');
+        const employeeDetailsView = document.getElementById('employee-details-view');
+        const monthSelector = document.getElementById('month-selector');
+        const editModal = document.getElementById('edit-modal');
+        const geminiModal = document.getElementById('gemini-modal');
+        
+        const ADMIN_PASSWORD = 'admin1234';
+
+        // --- Gemini API 호출 함수 ---
+        async function callGeminiAPI(prompt, retries = 3, delay = 1000) {
+            const apiKey = ""; // API 키는 비워두세요.
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        return candidate.content.parts[0].text;
+                    } else {
+                        // Gemini가 부적절한 콘텐츠 등의 이유로 답변을 거부했을 때의 처리
+                        let safetyFeedback = candidate?.safetyRatings?.map(r => `${r.category}: ${r.probability}`).join(', ') || 'No safety feedback.';
+                        console.error('Gemini response blocked or invalid:', safetyFeedback);
+                        return `AI가 답변 생성을 거부했습니다. (${safetyFeedback})`;
+                    }
+                } catch (error) {
+                    console.error(`Gemini API call failed (attempt ${i + 1}):`, error);
+                    if (i === retries - 1) return "AI 모델을 호출하는 데 실패했습니다. 잠시 후 다시 시도해 주세요.";
+                    await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+                }
+            }
+        }
+
+        // --- 데이터 관리 ---
+        function loadData() {
+            const data = localStorage.getItem('overtimeApp');
+            appData = data ? JSON.parse(data) : { employees: [] };
+            appData.employees.forEach(emp => {
+                emp.otRecords.forEach(rec => {
+                    rec.date = new Date(rec.date);
+                    rec.expiryDate = new Date(rec.expiryDate);
+                });
+                if (!emp.usageHistory) emp.usageHistory = [];
+                emp.usageHistory.forEach(hist => { hist.dateUsed = new Date(hist.dateUsed); });
+            });
+        }
+
+        function saveData() { localStorage.setItem('overtimeApp', JSON.stringify(appData)); }
+        function findEmployee(userId) { return appData.employees.find(emp => emp.id === userId); }
+
+        // --- UI 초기화 및 화면 전환 ---
+        function initializeApp() {
+            loadData();
+            // 데이터가 비어있을 경우, '박희성'을 기본 사용자로 추가합니다.
+            if (appData.employees.length === 0) {
+                appData.employees.push({ id: `user-${Date.now()}`, name: '박희성', otRecords: [], usageHistory: [] });
+                saveData();
+            }
+            userSelect.innerHTML = '<option value="">-- 사용자 선택 --</option>';
+            appData.employees.sort((a,b) => a.name.localeCompare(b.name)).forEach(emp => {
+                const option = document.createElement('option');
+                option.value = emp.id;
+                option.textContent = emp.name;
+                userSelect.appendChild(option);
+            });
+            authScreen.classList.remove('hidden');
+            userView.classList.add('hidden');
+            adminView.classList.add('hidden');
+            document.getElementById('admin-login-container').classList.add('hidden');
+            document.getElementById('user-selection-container').classList.remove('hidden');
+        }
+        
+        function logout() {
+            currentUserId = null;
+            isAdmin = false;
+            selectedAdminEmployeeId = null;
+            initializeApp();
+        }
+
+        // --- 렌더링 함수 (기존과 동일) ---
+        function renderUserView() {
+            const user = findEmployee(currentUserId);
+            if (!user) return;
+            document.getElementById('welcome-user').textContent = `${user.name}님, 환영합니다.`;
+            const otList = document.getElementById('ot-list');
+            const totalHoursEl = document.getElementById('total-remaining-hours');
+            otList.innerHTML = '';
+            user.otRecords.sort((a, b) => a.date - b.date);
+            let totalRemaining = user.otRecords.reduce((sum, rec) => sum + rec.remainingHours, 0);
+            if (user.otRecords.filter(r => r.remainingHours > 0).length === 0) {
+                 otList.innerHTML = `<div class="text-center py-12 text-slate-500"><p>잔여 OT가 없습니다.</p></div>`;
+            } else {
+                 user.otRecords.forEach(record => {
+                    if (record.remainingHours > 0) otList.appendChild(createOtCard(record));
+                });
+            }
+            totalHoursEl.textContent = `${totalRemaining.toFixed(1)}시간`;
+        }
+        
+        function renderAdminView() {
+            const employeeList = document.getElementById('employee-list');
+            employeeList.innerHTML = '';
+            appData.employees.sort((a,b) => a.name.localeCompare(b.name)).forEach(emp => {
+                const totalRemaining = emp.otRecords.reduce((sum, rec) => sum + rec.remainingHours, 0);
+                const li = document.createElement('li');
+                li.className = `flex justify-between items-center p-3 rounded-md cursor-pointer hover:bg-slate-100 ${selectedAdminEmployeeId === emp.id ? 'bg-blue-100' : ''}`;
+                li.dataset.employeeId = emp.id;
+                li.innerHTML = `<div><span class="font-bold">${emp.name}</span><span class="text-sm text-slate-500 block">잔여: ${totalRemaining.toFixed(1)}시간</span></div><button data-delete-employee-id="${emp.id}" class="text-red-500 hover:text-red-700 font-bold px-2 text-xl">&times;</button>`;
+                employeeList.appendChild(li);
+            });
+            if (selectedAdminEmployeeId) renderEmployeeDetails();
+            else employeeDetailsView.classList.add('hidden');
+        }
+        
+        function renderEmployeeDetails() {
+            const employee = findEmployee(selectedAdminEmployeeId);
+            if (!employee) {
+                employeeDetailsView.classList.add('hidden'); return;
+            }
+            document.getElementById('employee-details-name').textContent = `${employee.name}님의 OT 현황`;
+            renderAdminOtList(employee);
+            renderMonthlySummary(employee);
+            employeeDetailsView.classList.remove('hidden');
+        }
+        
+        function renderAdminOtList(employee) {
+            const adminOtList = document.getElementById('admin-ot-list');
+            adminOtList.innerHTML = '';
+            employee.otRecords.sort((a, b) => a.date - b.date);
+            if (employee.otRecords.length === 0) {
+                adminOtList.innerHTML = '<p class="text-slate-500 text-center py-4">OT 기록이 없습니다.</p>'; return;
+            }
+            employee.otRecords.forEach(record => adminOtList.appendChild(createOtCard(record, true)));
+        }
+        
+        function renderMonthlySummary(employee) {
+            const [year, month] = monthSelector.value.split('-').map(Number);
+            const startOfMonth = new Date(year, month - 1, 1);
+            const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+            const generated = employee.otRecords.filter(rec => rec.date >= startOfMonth && rec.date <= endOfMonth).reduce((sum, rec) => sum + rec.originalHours, 0);
+            const used = employee.usageHistory.filter(hist => hist.dateUsed >= startOfMonth && hist.dateUsed <= endOfMonth).reduce((sum, hist) => sum + hist.hoursUsed, 0);
+            const remainingAtMonthEnd = employee.otRecords.map(rec => {
+                    if (rec.expiryDate < startOfMonth) return 0;
+                    let remaining = rec.originalHours;
+                    employee.usageHistory.forEach(hist => {
+                        if (hist.originalOtId === rec.id && hist.dateUsed <= endOfMonth) remaining -= hist.hoursUsed;
+                    });
+                    return Math.max(0, remaining);
+                }).reduce((sum, r) => sum + r, 0);
+            document.getElementById('summary-generated').textContent = `${generated.toFixed(1)}시간`;
+            document.getElementById('summary-used').textContent = `${used.toFixed(1)}시간`;
+            document.getElementById('summary-remaining').textContent = `${remainingAtMonthEnd.toFixed(1)}시간`;
+        }
+
+        function createOtCard(record, forAdmin = false) {
+            const card = document.createElement('div');
+            const now = new Date();
+            const expiry = record.expiryDate;
+            const daysUntilExpiry = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+            let borderColor = 'border-slate-200', textColor = 'text-slate-600', expiryText = `만료: ${formatDate(expiry)}`;
+            if (daysUntilExpiry <= 0) { borderColor = 'border-red-500'; textColor = 'text-red-600 font-bold'; expiryText = '만료됨'; } 
+            else if (daysUntilExpiry <= 7) { borderColor = 'border-red-400'; textColor = 'text-red-500'; expiryText += ` (${daysUntilExpiry}일 남음)`; } 
+            else if (daysUntilExpiry <= 30) { borderColor = 'border-yellow-400'; textColor = 'text-yellow-600'; expiryText += ` (${daysUntilExpiry}일 남음)`; }
+            card.className = `p-4 border-l-4 rounded-md bg-slate-50 flex justify-between items-center ${borderColor}`;
+            let adminButtons = forAdmin ? `<div class="flex gap-2"><button data-edit-record-id="${record.id}" class="text-blue-600 hover:text-blue-800">수정</button><button data-delete-record-id="${record.id}" class="text-red-600 hover:text-red-800">삭제</button></div>` : '';
+            card.innerHTML = `<div><p class="font-bold text-slate-800">${formatDate(record.date)} 발생</p><p class="text-sm text-slate-600">잔여 ${record.remainingHours.toFixed(1)} / 총 ${record.originalHours.toFixed(1)}시간</p><p class="text-sm mt-1 ${textColor}">${expiryText}</p></div>${adminButtons}`;
+            return card;
+        }
+
+        // --- 이벤트 핸들러 (기존과 동일) ---
+        document.getElementById('show-admin-login').addEventListener('click', () => { document.getElementById('user-selection-container').classList.add('hidden'); document.getElementById('admin-login-container').classList.remove('hidden'); });
+        document.getElementById('back-to-user-select').addEventListener('click', () => { document.getElementById('user-selection-container').classList.remove('hidden'); document.getElementById('admin-login-container').classList.add('hidden'); });
+        document.getElementById('login-admin-btn').addEventListener('click', () => {
+            if (adminPasswordInput.value === ADMIN_PASSWORD) {
+                isAdmin = true; authScreen.classList.add('hidden'); adminView.classList.remove('hidden'); monthSelector.valueAsDate = new Date(); renderAdminView();
+            } else { showToast('비밀번호가 틀렸습니다.'); adminPasswordInput.value = ''; }
+        });
+        document.getElementById('login-user-btn').addEventListener('click', () => {
+            if (userSelect.value) { currentUserId = userSelect.value; authScreen.classList.add('hidden'); userView.classList.remove('hidden'); renderUserView(); } 
+            else { showToast('사용자를 선택해주세요.'); }
+        });
+        document.getElementById('register-user-btn').addEventListener('click', () => {
+            const newName = document.getElementById('new-user-name').value.trim();
+            if (newName && !appData.employees.some(e => e.name === newName)) {
+                appData.employees.push({ id: `user-${Date.now()}`, name: newName, otRecords: [], usageHistory: [] });
+                saveData(); document.getElementById('new-user-name').value = ''; initializeApp(); showToast(`${newName} 사용자가 등록되었습니다.`);
+            } else if (!newName) { showToast('사용자 이름을 입력해주세요.'); } 
+            else { showToast('이미 존재하는 사용자 이름입니다.'); }
+        });
+        document.getElementById('logout-btn-user').addEventListener('click', logout);
+        document.getElementById('logout-btn-admin').addEventListener('click', logout);
+        document.getElementById('add-ot-form').addEventListener('submit', (e) => {
+            e.preventDefault(); const user = findEmployee(currentUserId);
+            const date = new Date(document.getElementById('ot-date').value);
+            const utcDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+            const hours = parseFloat(document.getElementById('ot-hours').value);
+            const expiryDate = new Date(utcDate); expiryDate.setMonth(expiryDate.getMonth() + 3);
+            user.otRecords.push({ id: `ot-${Date.now()}`, date: utcDate, originalHours: hours, remainingHours: hours, expiryDate: expiryDate });
+            saveData(); renderUserView(); e.target.reset();
+        });
+        document.getElementById('use-ot-form').addEventListener('submit', (e) => {
+            e.preventDefault(); const user = findEmployee(currentUserId);
+            const hoursToUse = parseInt(document.getElementById('use-hours').value, 10);
+            const totalAvailable = user.otRecords.reduce((sum, rec) => sum + rec.remainingHours, 0);
+            if (isNaN(hoursToUse) || hoursToUse <= 0) return showToast('사용할 시간을 정확히 입력해주세요.');
+            if (hoursToUse > totalAvailable) return showToast(`잔여 시간이 부족합니다. (잔여: ${totalAvailable.toFixed(1)}시간)`);
+            let remainingToUse = hoursToUse, messageParts = [], newTotalRemaining = totalAvailable;
+            for (const record of user.otRecords) {
+                if (remainingToUse <= 0) break;
+                if (record.remainingHours > 0) {
+                    const useFromThisRecord = Math.min(remainingToUse, record.remainingHours);
+                    record.remainingHours -= useFromThisRecord; remainingToUse -= useFromThisRecord; newTotalRemaining -= useFromThisRecord;
+                    user.usageHistory.push({ dateUsed: new Date(), hoursUsed: useFromThisRecord, originalOtId: record.id });
+                    const dateStr = `${record.date.getMonth() + 1}월${record.date.getDate()}일`;
+                    messageParts.push(`${dateStr} 발생 OT ${useFromThisRecord.toFixed(1)}시간 사용`);
+                }
+            }
+            document.getElementById('result-message').textContent = `${messageParts.join(', ')}, 잔여OT ${newTotalRemaining.toFixed(1)}시간`;
+            document.getElementById('result-card').classList.remove('hidden');
+            saveData(); renderUserView(); e.target.reset();
+        });
+        document.getElementById('copy-button').addEventListener('click', () => { const text = document.getElementById('result-message').textContent; navigator.clipboard.writeText(text).then(() => showToast('메시지가 복사되었습니다.'), () => showToast('복사에 실패했습니다.')); });
+        document.getElementById('add-employee-btn').addEventListener('click', () => {
+            const nameInput = document.getElementById('new-employee-name');
+            const newName = nameInput.value.trim();
+            if (newName && !appData.employees.some(e => e.name === newName)) {
+                appData.employees.push({ id: `user-${Date.now()}`, name: newName, otRecords: [], usageHistory: [] });
+                saveData(); renderAdminView(); nameInput.value = '';
+            } else { showToast('이름을 입력하거나 중복되지 않는 이름을 사용해주세요.'); }
+        });
+        document.getElementById('employee-list').addEventListener('click', (e) => {
+            const targetLi = e.target.closest('li');
+            if (e.target.dataset.deleteEmployeeId) {
+                const empId = e.target.dataset.deleteEmployeeId; const emp = findEmployee(empId);
+                if (confirm(`${emp.name} 직원을 삭제하시겠습니까? 모든 데이터가 사라집니다.`)) {
+                    appData.employees = appData.employees.filter(e => e.id !== empId);
+                    if (selectedAdminEmployeeId === empId) selectedAdminEmployeeId = null;
+                    saveData(); renderAdminView();
+                }
+            } else if (targetLi && targetLi.dataset.employeeId) { selectedAdminEmployeeId = targetLi.dataset.employeeId; renderAdminView(); }
+        });
+        monthSelector.addEventListener('change', () => renderEmployeeDetails());
+        document.getElementById('admin-ot-list').addEventListener('click', (e) => {
+            const employee = findEmployee(selectedAdminEmployeeId); if (!employee) return;
+            if (e.target.dataset.editRecordId) {
+                const record = employee.otRecords.find(r => r.id === e.target.dataset.editRecordId);
+                if (record) openEditModal(employee.id, record);
+            }
+            if (e.target.dataset.deleteRecordId) {
+                if (confirm('이 OT 기록을 삭제하시겠습니까?')) {
+                    employee.otRecords = employee.otRecords.filter(r => r.id !== e.target.dataset.deleteRecordId);
+                    saveData(); renderAdminView();
+                }
+            }
+        });
+        
+        // --- 모달 관리 ---
+        function openEditModal(employeeId, record) {
+            document.getElementById('edit-employee-id').value = employeeId;
+            document.getElementById('edit-record-id').value = record.id;
+            document.getElementById('edit-ot-date').value = record.date.toISOString().split('T')[0];
+            document.getElementById('edit-original-hours').value = record.originalHours;
+            document.getElementById('edit-remaining-hours').value = record.remainingHours;
+            editModal.classList.remove('hidden');
+            setTimeout(() => { editModal.querySelector('.modal-content').classList.remove('scale-95'); editModal.classList.remove('opacity-0'); }, 10);
+        }
+        function closeEditModal() {
+             editModal.classList.add('opacity-0');
+             editModal.querySelector('.modal-content').classList.add('scale-95');
+             setTimeout(() => editModal.classList.add('hidden'), 250);
+        }
+        document.getElementById('edit-ot-form').addEventListener('submit', (e) => {
+            e.preventDefault(); const employeeId = document.getElementById('edit-employee-id').value; const recordId = document.getElementById('edit-record-id').value;
+            const employee = findEmployee(employeeId); const record = employee.otRecords.find(r => r.id === recordId);
+            const newDate = new Date(document.getElementById('edit-ot-date').value);
+            record.date = new Date(newDate.getUTCFullYear(), newDate.getUTCMonth(), newDate.getUTCDate());
+            record.originalHours = parseFloat(document.getElementById('edit-original-hours').value);
+            record.remainingHours = parseFloat(document.getElementById('edit-remaining-hours').value);
+            record.expiryDate = new Date(record.date); record.expiryDate.setMonth(record.expiryDate.getMonth() + 3);
+            saveData(); renderAdminView(); closeEditModal();
+        });
+        document.getElementById('cancel-edit-btn').addEventListener('click', closeEditModal);
+        editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+        
+        // --- Gemini 모달 관리 ---
+        const geminiModalTitle = document.getElementById('gemini-modal-title');
+        const geminiModalContent = document.getElementById('gemini-modal-content');
+        function showGeminiModal(title) {
+            geminiModalTitle.textContent = title;
+            geminiModalContent.innerHTML = `<div class="flex justify-center items-center p-8"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div><p class="text-center text-slate-500">AI가 답변을 생성 중입니다...</p>`;
+            geminiModal.classList.remove('hidden');
+            setTimeout(() => { geminiModal.querySelector('.modal-content').classList.remove('scale-95'); geminiModal.classList.remove('opacity-0'); }, 10);
+        }
+        function updateGeminiModalContent(text) {
+            let formattedContent = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/•/g, '<br>•').replace(/\n/g, '<br>');
+            geminiModalContent.innerHTML = `<div class="text-slate-700 leading-relaxed">${formattedContent}</div>`;
+        }
+        function closeGeminiModal() {
+            geminiModal.classList.add('opacity-0');
+            geminiModal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => geminiModal.classList.add('hidden'), 250);
+        }
+        document.getElementById('close-gemini-modal-btn').addEventListener('click', closeGeminiModal);
+        geminiModal.addEventListener('click', (e) => { if (e.target === geminiModal) closeGeminiModal(); });
+
+        // --- Gemini 이벤트 핸들러 ---
+        document.getElementById('gemini-vacation-btn').addEventListener('click', async () => {
+            const user = findEmployee(currentUserId); if (!user) return;
+            const totalRemaining = user.otRecords.reduce((sum, rec) => sum + rec.remainingHours, 0);
+            if (totalRemaining < 4) { showToast('최소 4시간 이상의 잔여 OT가 있을 때 추천받을 수 있습니다.'); return; }
+            showGeminiModal('✨ AI 휴가 계획 추천');
+            const currentDate = new Date().toLocaleDateString('ko-KR');
+            const prompt = `당신은 한국 직장인을 위한 휴가 계획 전문가입니다. 한 사용자가 총 ${totalRemaining.toFixed(1)}시간의 초과근무(OT) 시간을 가지고 있습니다. 오늘 날짜는 ${currentDate}입니다. 대한민국의 공휴일을 고려하여, 이 OT 시간을 활용해 연차 소진 없이 멋진 재충전 휴가를 만들 수 있는 2-3가지 창의적인 아이디어를 제안해주세요. 결과는 친근하고 격려하는 말투를 사용해 한국어로 제안하고, 리스트 형식으로 정리해주세요.`;
+            const result = await callGeminiAPI(prompt);
+            updateGeminiModalContent(result);
+        });
+
+        document.getElementById('gemini-analysis-btn').addEventListener('click', async () => {
+            const employee = findEmployee(selectedAdminEmployeeId);
+            if (!employee || employee.otRecords.length === 0) { showToast('분석할 OT 기록이 없습니다.'); return; }
+            showGeminiModal(`✨ ${employee.name}님 근무 패턴 분석`);
+            const recordsForAnalysis = employee.otRecords.map(rec => ({ date: rec.date.toISOString().split('T')[0], generatedHours: rec.originalHours }));
+            const prompt = `당신은 HR 데이터 분석 전문가입니다. 한 직원의 최근 초과근무 기록 데이터가 주어졌습니다. 데이터: ${JSON.stringify(recordsForAnalysis)}. 이 데이터를 기반으로 직원의 근무 패턴에 대한 간결하고 중립적인 분석을 한국어로 제공해주세요. 판단이나 비판적인 표현은 삼가고, 데이터에 기반한 사실적인 경향에 초점을 맞춰주세요. 결과는 2~3개의 불렛 포인트(•)로 요약해주세요.`;
+            const result = await callGeminiAPI(prompt);
+            updateGeminiModalContent(result);
+        });
+
+        // --- 데이터 다운로드 이벤트 핸들러 ---
+        document.getElementById('download-data-btn').addEventListener('click', () => {
+            try {
+                const data = localStorage.getItem('overtimeApp');
+                if (!data || JSON.parse(data).employees.length === 0) {
+                    showToast('다운로드할 데이터가 없습니다.');
+                    return;
+                }
+
+                const blob = new Blob([data], { type: 'application/json;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+
+                const today = new Date();
+                const dateString = `${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
+                a.download = `ot-data-backup-${dateString}.json`;
+                
+                a.href = url;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showToast('데이터 백업 파일 다운로드를 시작합니다.');
+
+            } catch (error) {
+                console.error('데이터 다운로드 실패:', error);
+                showToast('데이터 다운로드 중 오류가 발생했습니다.');
+            }
+        });
+
+        // --- 유틸리티 ---
+        function formatDate(date) { return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }); }
+        function showToast(message) { const toast = document.getElementById('toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 3000); }
+
+        // --- 앱 시작 ---
+        initializeApp();
+    });
+    </script>
+</body>
+</html>
+
